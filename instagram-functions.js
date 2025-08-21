@@ -2,15 +2,25 @@
 import { sleep, tryClickByText } from './bot.js';
 import { hasMyCommentAndCache } from './utils/igHasMyComment.js';
 
-// Global sets to track liked posts
+// Global sets to track liked posts and maintain discovery state
 const likedPosts = new Set();
-const discoveredPosts = new Set();
+const allDiscoveredPosts = new Set(); // Track all posts discovered in current session
+let isOnSearchPage = false;
+let currentSearchUrl = null;
+
+// Function to reset discovery state for new search sessions
+export function resetDiscoveryState() {
+  allDiscoveredPosts.clear();
+  isOnSearchPage = false;
+  currentSearchUrl = null;
+  console.log('🔄 Discovery state reset for new search session');
+}
 
 // Post Discovery Functions
 export async function discoverInstagramPosts(page, searchCriteria, maxPosts = 10) {
   console.log(`🚀 DISCOVERY: Starting Instagram post discovery with criteria:`, searchCriteria);
   console.log(`🚀 DISCOVERY: Max posts requested: ${maxPosts}`);
-  console.log(`🚀 DISCOVERY: Currently discovered posts: ${discoveredPosts.size}`);
+  console.log(`🚀 DISCOVERY: Total posts discovered so far: ${allDiscoveredPosts.size}`);
   
   const { hashtag, keywords } = searchCriteria;
   
@@ -23,9 +33,16 @@ export async function discoverInstagramPosts(page, searchCriteria, maxPosts = 10
     throw new Error('Either hashtag or keywords must be provided');
   }
 
-  console.log(`🚀 DISCOVERY: Navigating to search URL: ${searchUrl}`);
-  await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-  await sleep(3000);
+  // Only navigate if we're not already on the search page or if search criteria changed
+  if (!isOnSearchPage || currentSearchUrl !== searchUrl) {
+    console.log(`🚀 DISCOVERY: Navigating to search URL: ${searchUrl}`);
+    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+    await sleep(3000);
+    isOnSearchPage = true;
+    currentSearchUrl = searchUrl;
+  } else {
+    console.log(`🚀 DISCOVERY: Already on search page, continuing from current position`);
+  }
 
   // Click on "Recent" tab to get latest posts instead of popular
   console.log(`🚀 DISCOVERY: Switching to Recent posts for latest content`);
@@ -80,11 +97,12 @@ export async function discoverInstagramPosts(page, searchCriteria, maxPosts = 10
 
   const posts = [];
   let attempts = 0;
-  const maxAttempts = 50;
+  let consecutiveFailedScrolls = 0;
+  const maxConsecutiveFailedScrolls = 10; // Only stop when scrolling consistently fails to load new content
 
-  while (posts.length < maxPosts && attempts < maxAttempts) {
+  while (posts.length < maxPosts) {
     attempts++;
-    console.log(`🚀 DISCOVERY: Attempt ${attempts}/${maxAttempts}, found ${posts.length}/${maxPosts} posts`);
+    console.log(`🚀 DISCOVERY: Attempt ${attempts}, found ${posts.length}/${maxPosts} posts`);
 
     // Get post links
     const newPosts = await page.evaluate(() => {
@@ -97,12 +115,12 @@ export async function discoverInstagramPosts(page, searchCriteria, maxPosts = 10
 
     console.log(`🚀 DISCOVERY: Found ${newPosts.length} post links on page`);
 
-    // Add new unique posts
+    // Add new unique posts (check against both current batch and all discovered posts)
     for (const postUrl of newPosts) {
-      if (!discoveredPosts.has(postUrl) && posts.length < maxPosts) {
-        discoveredPosts.add(postUrl);
+      if (!posts.includes(postUrl) && !allDiscoveredPosts.has(postUrl) && posts.length < maxPosts) {
         posts.push(postUrl);
-        console.log(`🚀 DISCOVERY: Added post ${posts.length}/${maxPosts}: ${postUrl}`);
+        allDiscoveredPosts.add(postUrl);
+        console.log(`🚀 DISCOVERY: Added new post ${posts.length}/${maxPosts}: ${postUrl}`);
       }
     }
 
@@ -123,9 +141,16 @@ export async function discoverInstagramPosts(page, searchCriteria, maxPosts = 10
     await sleep(2000);
     const newHeight = await page.evaluate(() => document.body.scrollHeight);
     
-    if (currentHeight === newHeight && attempts > 5) {
-      console.log(`🚀 DISCOVERY: No new content loading, stopping discovery`);
-      break;
+    if (currentHeight === newHeight) {
+      consecutiveFailedScrolls++;
+      console.log(`🚀 DISCOVERY: No new content loading (${consecutiveFailedScrolls}/${maxConsecutiveFailedScrolls} failed scrolls)`);
+      
+      if (consecutiveFailedScrolls >= maxConsecutiveFailedScrolls) {
+        console.log(`🛑 DISCOVERY: ${maxConsecutiveFailedScrolls} consecutive failed scrolls - all posts under this search term have been exhausted`);
+        break; // VALID REASON: Search term exhausted
+      }
+    } else {
+      consecutiveFailedScrolls = 0; // Reset counter when new content loads
     }
   }
 
@@ -429,56 +454,264 @@ export async function instagramLike(page, postUrl) {
     await page.goto(postUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     await sleep(2000);
 
-    // Check if already liked
-    console.log(`🚀 NEW CODE: Checking if post is already liked...`);
-    const alreadyLiked = await page.evaluate(() => {
-      // Look for filled heart (liked state)
-      const likedHeart = document.querySelector('svg[aria-label="Unlike"]') ||
-                        document.querySelector('svg[fill="#ed4956"]') || // Instagram red color
-                        document.querySelector('button[aria-label="Unlike"]');
-      return !!likedHeart;
+    // Check if already liked with comprehensive debugging
+    console.log(`❤️ Checking if post is already liked...`);
+    const likeStatus = await page.evaluate(() => {
+      const debug = {
+        currentUrl: window.location.href,
+        foundElements: [],
+        isLiked: false
+      };
+      
+      // Check for liked state with multiple indicators
+      const likedSelectors = [
+        'svg[aria-label="Unlike"]',
+        'svg[fill="#ed4956"]',
+        'button[aria-label="Unlike"]',
+        '[data-testid="unlike-button"]',
+        'svg[aria-label*="Unlike"]'
+      ];
+      
+      for (const selector of likedSelectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+          debug.foundElements.push({ selector, found: true });
+          debug.isLiked = true;
+        } else {
+          debug.foundElements.push({ selector, found: false });
+        }
+      }
+      
+      // Also check for unliked state
+      const unlikedSelectors = [
+        'svg[aria-label="Like"]',
+        'button[aria-label="Like"]',
+        '[data-testid="like-button"]'
+      ];
+      
+      for (const selector of unlikedSelectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+          debug.foundElements.push({ selector, found: true, state: 'unliked' });
+        }
+      }
+      
+      return debug;
     });
-
-    if (alreadyLiked) {
-      console.log(`🚀 NEW CODE: Post is already liked, marking as complete`);
+    
+    console.log(`❤️ Like status check:`, likeStatus);
+    
+    if (likeStatus.isLiked) {
+      console.log(`❤️ Post is already liked, marking as complete`);
       likedPosts.add(postUrl);
       return true;
     }
 
-    // Find and click like button
-    console.log(`🚀 NEW CODE: Looking for like button...`);
-    const likeButton = await page.$('svg[aria-label="Like"]') ||
-                      await page.$('button[aria-label="Like"]') ||
-                      await page.$('span[aria-label="Like"]');
 
-    if (!likeButton) {
-      console.log(`🚀 NEW CODE: Like button not found, trying alternative selectors...`);
-      
-      // Try clicking on heart icon directly
-      const heartIcon = await page.$('svg') ||
-                       await page.$('[role="button"]');
-      
-      if (heartIcon) {
-        console.log(`🚀 NEW CODE: Trying to click heart icon...`);
-        await heartIcon.click();
-        await sleep(1000);
-      } else {
-        throw new Error('Like button not found');
+
+    // Find and click like button with comprehensive search
+    console.log(`❤️ Looking for like button with multiple selectors...`);
+    
+    const likeSelectors = [
+      'svg[aria-label="Like"]',
+      'button[aria-label="Like"]', 
+      'span[aria-label="Like"]',
+      '[data-testid="like-button"]',
+      'article button:first-of-type', // First button in article is usually like
+      'article svg:first-of-type', // First SVG in article
+      '[role="button"] svg', // SVG inside role=button
+    ];
+    
+    let likeButton = null;
+    for (const selector of likeSelectors) {
+      try {
+        likeButton = await page.$(selector);
+        if (likeButton) {
+          console.log(`❤️ Found like button with selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        // Continue to next selector
       }
-    } else {
-      console.log(`🚀 NEW CODE: Clicking like button...`);
-      await likeButton.click();
-      await sleep(1000);
     }
 
-    // Verify the like was successful
-    console.log(`🚀 NEW CODE: Verifying like was successful...`);
-    const likeSuccessful = await page.evaluate(() => {
-      const likedHeart = document.querySelector('svg[aria-label="Unlike"]') ||
-                        document.querySelector('svg[fill="#ed4956"]') ||
-                        document.querySelector('button[aria-label="Unlike"]');
-      return !!likedHeart;
+    if (!likeButton) {
+      // Comprehensive debugging of page structure
+      const pageDebug = await page.evaluate(() => {
+        const debug = {
+          url: window.location.href,
+          title: document.title,
+          articleElements: [],
+          buttons: [],
+          svgs: [],
+          likeRelatedElements: []
+        };
+        
+        // Check for article elements
+        const articles = document.querySelectorAll('article');
+        debug.articleElements = Array.from(articles).map((art, i) => ({
+          index: i,
+          hasButtons: art.querySelectorAll('button').length,
+          hasSvgs: art.querySelectorAll('svg').length,
+          firstButtonAria: art.querySelector('button')?.getAttribute('aria-label'),
+          firstSvgAria: art.querySelector('svg')?.getAttribute('aria-label')
+        }));
+        
+        // Check all buttons
+        const allButtons = document.querySelectorAll('button, [role="button"]');
+        debug.buttons = Array.from(allButtons).slice(0, 10).map(btn => ({
+          ariaLabel: btn.getAttribute('aria-label'),
+          textContent: btn.textContent?.trim().slice(0, 30),
+          role: btn.getAttribute('role'),
+          className: btn.className?.slice(0, 50)
+        }));
+        
+        // Check all SVGs
+        const allSvgs = document.querySelectorAll('svg');
+        debug.svgs = Array.from(allSvgs).slice(0, 10).map(svg => ({
+          ariaLabel: svg.getAttribute('aria-label'),
+          fill: svg.getAttribute('fill'),
+          className: svg.className?.slice(0, 50)
+        }));
+        
+        // Look for like-related elements
+        const likeElements = document.querySelectorAll('[aria-label*="like"], [aria-label*="Like"], [data-testid*="like"]');
+        debug.likeRelatedElements = Array.from(likeElements).map(el => ({
+          tagName: el.tagName,
+          ariaLabel: el.getAttribute('aria-label'),
+          dataTestId: el.getAttribute('data-testid')
+        }));
+        
+        return debug;
+      });
+      
+      console.log(`❤️ COMPREHENSIVE DEBUG:`, JSON.stringify(pageDebug, null, 2));
+      
+      // Try fallback: click on first heart-like element
+      console.log(`❤️ Trying fallback: clicking first heart-like element...`);
+      const fallbackClick = await page.evaluate(() => {
+        // Look for any element that might be a like button
+        const possibleLikeElements = [
+          ...document.querySelectorAll('svg'),
+          ...document.querySelectorAll('button'),
+          ...document.querySelectorAll('[role="button"]')
+        ];
+        
+        // Find the first one that looks like it could be a like button
+        for (const el of possibleLikeElements) {
+          const ariaLabel = el.getAttribute('aria-label') || '';
+          const className = el.className || '';
+          const textContent = el.textContent || '';
+          
+          // Check if it looks like a like button
+          if (ariaLabel.toLowerCase().includes('like') || 
+              ariaLabel.toLowerCase().includes('heart') ||
+              className.toLowerCase().includes('like') ||
+              textContent.includes('❤️') ||
+              textContent.includes('♥')) {
+            el.click();
+            return { clicked: true, element: { ariaLabel, className: className.slice(0, 30) } };
+          }
+        }
+        
+        // If no obvious like button, try clicking the first SVG in the article
+        const article = document.querySelector('article');
+        if (article) {
+          const firstSvg = article.querySelector('svg');
+          if (firstSvg) {
+            firstSvg.click();
+            return { clicked: true, element: { type: 'first-svg-in-article' } };
+          }
+        }
+        
+        return { clicked: false };
+      });
+      
+      if (fallbackClick.clicked) {
+        console.log(`❤️ Fallback click successful:`, fallbackClick.element);
+        await sleep(2000);
+      } else {
+        throw new Error('Like button not found and fallback failed');
+      }
+    }
+
+    console.log(`❤️ Clicking like button...`);
+    await likeButton.click();
+    await sleep(1000);
+    
+    // Try multiple click methods if first doesn't work
+    const clickResult = await page.evaluate(() => {
+      // Check if like was successful after first click
+      const likedAfterFirstClick = document.querySelector('svg[aria-label="Unlike"]') || 
+                                  document.querySelector('svg[fill="#ed4956"]');
+      
+      if (likedAfterFirstClick) {
+        return { success: true, method: 'first-click' };
+      }
+      
+      // Try clicking again with different approach
+      const likeButton = document.querySelector('svg[aria-label="Like"]') ||
+                        document.querySelector('button[aria-label="Like"]') ||
+                        document.querySelector('[data-testid="like-button"]');
+      
+      if (likeButton) {
+        likeButton.click();
+        return { success: true, method: 'second-click' };
+      }
+      
+      // Try keyboard shortcut (double-tap space or L key)
+      return { success: false, method: 'no-more-options' };
     });
+    
+    console.log(`❤️ Click result:`, clickResult);
+    await sleep(2000); // Wait for any animation
+
+    // Verify the like was successful with comprehensive checking
+    console.log(`❤️ Verifying like was successful...`);
+    const likeVerification = await page.evaluate(() => {
+      const verification = {
+        isLiked: false,
+        foundElements: [],
+        currentUrl: window.location.href
+      };
+      
+      // Check for liked state indicators
+      const likedIndicators = [
+        'svg[aria-label="Unlike"]',
+        'svg[fill="#ed4956"]',
+        'button[aria-label="Unlike"]',
+        '[data-testid="unlike-button"]',
+        'svg[aria-label*="Unlike"]'
+      ];
+      
+      for (const selector of likedIndicators) {
+        const element = document.querySelector(selector);
+        if (element) {
+          verification.foundElements.push({ selector, found: true });
+          verification.isLiked = true;
+        }
+      }
+      
+      // Also check if unliked indicators are gone
+      const unlikedIndicators = [
+        'svg[aria-label="Like"]',
+        'button[aria-label="Like"]',
+        '[data-testid="like-button"]'
+      ];
+      
+      for (const selector of unlikedIndicators) {
+        const element = document.querySelector(selector);
+        if (!element) {
+          verification.foundElements.push({ selector, found: false, note: 'unliked indicator gone' });
+        }
+      }
+      
+      return verification;
+    });
+    
+    console.log(`❤️ Like verification result:`, likeVerification);
+    
+    const likeSuccessful = likeVerification.isLiked;
 
     if (likeSuccessful) {
       console.log(`🚀 NEW CODE: Successfully liked post: ${postUrl}`);
@@ -494,7 +727,7 @@ export async function instagramLike(page, postUrl) {
   }
 }
 
-export async function instagramComment(page, postUrl, comment, username) {
+export async function instagramComment(page, postUrl, comment, username, skipNavigation = false) {
   console.log(`💬 ===== INSTAGRAM COMMENT START =====`);
   console.log(`💬 POST: ${postUrl}`);
   console.log(`💬 COMMENT: ${comment}`);
@@ -503,12 +736,7 @@ export async function instagramComment(page, postUrl, comment, username) {
   try {
     // Check if we already have a comment on this post
     console.log(`🔍 Checking if we already commented on this post...`);
-    const alreadyCommented = await hasMyCommentAndCache({
-      page,
-      username,
-      postUrl,
-      markCommented: false
-    });
+    const alreadyCommented = await hasMyCommentAndCache({ page, username, postUrl });
 
     if (alreadyCommented) {
       console.log(`⏭️ SKIP: Already commented on this post`);
@@ -520,9 +748,14 @@ export async function instagramComment(page, postUrl, comment, username) {
       };
     }
 
-    console.log(`🌐 Navigating to post: ${postUrl}`);
-    await page.goto(postUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    await sleep(3000);
+    if (!skipNavigation) {
+      console.log(`🌐 Navigating to post: ${postUrl}`);
+      await page.goto(postUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      await sleep(3000);
+    } else {
+      console.log(`🌐 Already on post page, skipping navigation`);
+      await sleep(1000); // Short wait to ensure page is ready
+    }
 
     // Check for login wall
     const loginWall = await page.evaluate(() => {
@@ -605,12 +838,9 @@ export async function instagramComment(page, postUrl, comment, username) {
     // Try to find and click submit button
     let submitted = false;
     
-    // Method 1: Look for Post/Submit button
+    // Method 1: Look for Post/Submit button using valid CSS selectors
     const submitSelectors = [
-      'button:has-text("Post")',
-      'button[type="submit"]',
-      'button:has-text("Share")',
-      '[role="button"]:has-text("Post")'
+      'button[type="submit"]'
     ];
 
     for (const selector of submitSelectors) {
@@ -626,6 +856,52 @@ export async function instagramComment(page, postUrl, comment, username) {
         // Continue to next selector
       }
     }
+    
+    // Method 1b: Try finding Post button by text content using page.evaluate
+    if (!submitted) {
+      console.log(`💬 Trying to find Post button by text content...`);
+      const buttonInfo = await page.evaluate(() => {
+        // Look for buttons near the comment input area specifically
+        const commentInput = document.querySelector('textarea[placeholder*="comment" i]') ||
+                            document.querySelector('textarea[aria-label*="comment" i]') ||
+                            document.querySelector('textarea');
+        
+        let buttons = [];
+        if (commentInput) {
+          // Find buttons that are siblings or in the same container as the comment input
+          const container = commentInput.closest('form, div, section');
+          if (container) {
+            buttons = Array.from(container.querySelectorAll('button, [role="button"]'));
+          }
+        }
+        
+        // Fallback to all buttons if no container found
+        if (buttons.length === 0) {
+          buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+        }
+        
+        const buttonTexts = buttons.map(btn => btn.textContent?.trim().toLowerCase() || '');
+        
+        for (let i = 0; i < buttons.length; i++) {
+          const text = buttonTexts[i];
+          const button = buttons[i];
+          
+          // Look for "post" button specifically, and ensure it's not disabled
+          if (text === 'post' && !button.disabled && button.offsetHeight > 0) {
+            button.click();
+            return { found: true, text: text, totalButtons: buttons.length, context: 'comment-area' };
+          }
+        }
+        return { found: false, buttonTexts: buttonTexts.slice(0, 10), totalButtons: buttons.length, context: 'comment-area' };
+      });
+      
+      if (buttonInfo.found) {
+        console.log(`💬 Found and clicked "${buttonInfo.text}" button (${buttonInfo.totalButtons} buttons total)`);
+        submitted = true;
+      } else {
+        console.log(`💬 No Post/Share button found. Available buttons: [${buttonInfo.buttonTexts.join(', ')}] (${buttonInfo.totalButtons} total)`);
+      }
+    }
 
     // Method 2: Try Enter key if button not found
     if (!submitted) {
@@ -638,30 +914,48 @@ export async function instagramComment(page, postUrl, comment, username) {
 
     // Verify comment was posted by checking if input is cleared or comment appears
     console.log(`💬 Verifying comment was posted...`);
-    const commentPosted = await page.evaluate((commentText) => {
+    const verificationResult = await page.evaluate((commentText) => {
       // Check if comment input is cleared
       const input = document.querySelector('textarea[placeholder*="comment" i]') ||
                    document.querySelector('textarea[aria-label*="comment" i]') ||
                    document.querySelector('textarea');
       
       const inputCleared = input && input.value.trim() === '';
+      const inputValue = input ? input.value.trim() : 'no-input-found';
       
-      // Also check if our comment appears in the comments section
-      const commentAppeared = document.body.textContent.includes(commentText);
+      // Look more specifically for comments in comment sections
+      const commentSections = document.querySelectorAll('[role="button"] span, article span, li span');
+      let commentFound = false;
       
-      return inputCleared || commentAppeared;
+      for (const span of commentSections) {
+        if (span.textContent && span.textContent.includes(commentText)) {
+          commentFound = true;
+          break;
+        }
+      }
+      
+      return {
+        inputCleared,
+        inputValue,
+        commentFound,
+        totalCommentElements: commentSections.length,
+        success: inputCleared || commentFound
+      };
     }, comment);
+    
+    console.log(`💬 Verification result:`, {
+      inputCleared: verificationResult.inputCleared,
+      inputValue: verificationResult.inputValue,
+      commentFound: verificationResult.commentFound,
+      totalElements: verificationResult.totalCommentElements
+    });
+    
+    const commentPosted = verificationResult.success;
 
     if (commentPosted) {
       console.log(`✅ Comment posted successfully: ${postUrl}`);
       
-      // Mark this post as commented in our cache
-      await hasMyCommentAndCache({
-        page,
-        username,
-        postUrl,
-        markCommented: true
-      });
+      // No need to mark in cache - we detect comments directly from the page
       
       console.log(`💬 ===== INSTAGRAM COMMENT END: SUCCESS =====`);
       return { success: true, postUrl };

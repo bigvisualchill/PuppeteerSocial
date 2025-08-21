@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Social Media Bot</title>
+    <title>Insta Bot</title>
     <style>
         * {
             margin: 0;
@@ -924,8 +924,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Social Media Bot</h1>
-            <p>Automate your social media interactions with AI-powered intelligence</p>
+            <h1>Insta Bot</h1>
+            <p>Automate your Instagram interactions with AI-powered intelligence</p>
         </div>
         
         <div class="content">
@@ -938,17 +938,6 @@
 
             <!-- Login Tab -->
             <div id="login" class="tab-content active">
-
-                <div class="form-group">
-          <label for="platform">Platform:</label>
-          <select id="platform" name="platform" required>
-            <option value="">Select Platform</option>
-            <option value="instagram">Instagram</option>
-            <option value="x">X (Twitter)</option>
-            <option value="threads">Threads</option>
-            <option value="bluesky">Bluesky</option>
-          </select>
-        </div>
 
         <div class="form-group">
           <label for="sessionName">Account Name:</label>
@@ -1153,18 +1142,6 @@
                                     <span class="tally-platform">📷 Instagram</span>
                                     <span class="tally-count" id="instagramTally">0</span>
                                 </div>
-                                <div class="tally-item">
-                                    <span class="tally-platform">🐦 X (Twitter)</span>
-                                    <span class="tally-count" id="xTally">0</span>
-                                </div>
-                                <div class="tally-item">
-                                    <span class="tally-platform">🧵 Threads</span>
-                                    <span class="tally-count" id="threadsTally">0</span>
-                                </div>
-                                <div class="tally-item">
-                                    <span class="tally-platform">🦋 Bluesky</span>
-                                    <span class="tally-count" id="blueskyTally">0</span>
-                                </div>
                             </div>
                             <div class="total-tally">
                                 <span class="total-label">Total Comments:</span>
@@ -1303,11 +1280,7 @@
                                 const parsed = JSON.parse(sessionData);
                                 const platform = parsed.platform || 'unknown';
                                 const username = parsed.username || session.split('_').slice(1).join('_');
-                                const platformName = platform === 'instagram' ? 'Instagram' : 
-                                                   platform === 'threads' ? 'Threads' : 
-                                                   platform === 'x' ? 'X (Twitter)' : 
-                                                   platform === 'bluesky' ? 'Bluesky' : 
-                                                   platform.charAt(0).toUpperCase() + platform.slice(1);
+                                const platformName = 'Instagram';
                                 displayText = `${platformName} | ${username}`;
                             }
                         } catch (error) {
@@ -1316,11 +1289,7 @@
                             if (parts.length >= 2) {
                                 const platform = parts[0];
                                 const username = parts.slice(1).join('_');
-                                const platformName = platform === 'instagram' ? 'Instagram' : 
-                                                   platform === 'threads' ? 'Threads' : 
-                                                   platform === 'x' ? 'X (Twitter)' : 
-                                                   platform === 'bluesky' ? 'Bluesky' : 
-                                                   platform.charAt(0).toUpperCase() + platform.slice(1);
+                                const platformName = 'Instagram';
                                 displayText = `${platformName} | ${username}`;
                             }
                         }
@@ -1354,11 +1323,7 @@
                                 const parsed = JSON.parse(sessionData);
                                 const platform = parsed.platform || 'unknown';
                                 const username = parsed.username || session.split('_').slice(1).join('_');
-                                const platformName = platform === 'instagram' ? 'Instagram' : 
-                                                   platform === 'threads' ? 'Threads' : 
-                                                   platform === 'x' ? 'X (Twitter)' : 
-                                                   platform === 'bluesky' ? 'Bluesky' : 
-                                                   platform.charAt(0).toUpperCase() + platform.slice(1);
+                                const platformName = 'Instagram';
                                 displayText = `${platformName} | ${username}`;
                             }
                         } catch (error) {
@@ -1367,11 +1332,7 @@
                             if (parts.length >= 2) {
                                 const platform = parts[0];
                                 const username = parts.slice(1).join('_');
-                                const platformName = platform === 'instagram' ? 'Instagram' : 
-                                                   platform === 'threads' ? 'Threads' : 
-                                                   platform === 'x' ? 'X (Twitter)' : 
-                                                   platform === 'bluesky' ? 'Bluesky' : 
-                                                   platform.charAt(0).toUpperCase() + platform.slice(1);
+                                const platformName = 'Instagram';
                                 displayText = `${platformName} | ${username}`;
                             }
                         }
@@ -1409,51 +1370,16 @@
             statusDiv.className = `status-message ${type}`;
         }
 
-        // Update search fields based on selected account's platform
+        // Update search fields for Instagram
         function updateSearchFields() {
-            const activeSession = document.getElementById('autoActiveSession').value;
             const hashtagField = document.getElementById('hashtagField');
             const keywordsField = document.getElementById('keywordsField');
             const hashtagHelp = document.getElementById('hashtagHelp');
             
-            if (!activeSession) {
-                // No account selected - show hashtag field by default
-                if (hashtagField) hashtagField.style.display = 'block';
-                if (keywordsField) keywordsField.style.display = 'none';
-                if (hashtagHelp) hashtagHelp.textContent = 'Search for posts with these hashtags';
-                return;
-            }
-            
-            // Get platform from session data
-            let platform = 'instagram'; // default
-            try {
-                const sessionData = localStorage.getItem(`session_${activeSession}`);
-                if (sessionData) {
-                    const parsed = JSON.parse(sessionData);
-                    platform = parsed.platform || 'instagram';
-                }
-            } catch (error) {
-                console.log('Could not get platform from session data, using default');
-            }
-            
-            // Update field visibility based on platform
-            if (platform === 'x') {
-                // X (Twitter) - show both fields as they work differently
-                if (hashtagField) hashtagField.style.display = 'block';
-                if (keywordsField) keywordsField.style.display = 'block';
-                if (hashtagHelp) hashtagHelp.textContent = 'Search for posts with these hashtags';
-            } else {
-                // Instagram, Threads, and Bluesky - only show hashtag field
-                if (hashtagField) hashtagField.style.display = 'block';
-                if (keywordsField) keywordsField.style.display = 'none';
-                if (platform === 'threads') {
-                    if (hashtagHelp) hashtagHelp.textContent = 'Search for posts containing this text';
-                } else if (platform === 'bluesky') {
-                    if (hashtagHelp) hashtagHelp.textContent = 'Search for posts with hashtags or keywords';
-                } else {
-                    if (hashtagHelp) hashtagHelp.textContent = 'Search for posts with these hashtags';
-                }
-            }
+            // Instagram only - show hashtag field
+            if (hashtagField) hashtagField.style.display = 'block';
+            if (keywordsField) keywordsField.style.display = 'none';
+            if (hashtagHelp) hashtagHelp.textContent = 'Search for posts with these hashtags';
         }
 
         // Clear all localStorage session data
@@ -1477,6 +1403,8 @@
                 console.log(`Cleared ${keysToRemove.length} session entries from localStorage`);
             }
         }
+
+
 
         function validateForm() {
             const action = el('action').value;
@@ -1543,7 +1471,7 @@
                 queueList.innerHTML = postingQueue.map((item, index) => `
                     <div class="queue-item">
                         <div class="queue-item-info">
-                            <div class="queue-item-platform">${item.platformName || item.platform}</div>
+                            <div class="queue-item-platform">📷 Instagram</div>
                             <div class="queue-item-account">Account: ${item.account}</div>
                             <div class="queue-item-details">
                                 ${item.hashtag ? `#${item.hashtag}` : item.keywords || 'No search terms'} • 
@@ -1568,23 +1496,9 @@
                 return;
             }
 
-            // Get platform info for this session
-            let platform = 'instagram';
-            let platformName = 'Instagram';
-            try {
-                const sessionData = localStorage.getItem(`session_${activeSession}`);
-                if (sessionData) {
-                    const parsed = JSON.parse(sessionData);
-                    platform = parsed.platform || 'instagram';
-                    platformName = platform === 'instagram' ? 'Instagram' : 
-                                 platform === 'threads' ? 'Threads' : 
-                                 platform === 'x' ? 'X (Twitter)' : 
-                                 platform === 'bluesky' ? 'Bluesky' : 
-                                 platform.charAt(0).toUpperCase() + platform.slice(1);
-                }
-            } catch (error) {
-                console.log('Could not get platform from session data, using default');
-            }
+            // Instagram-only platform
+            const platform = 'instagram';
+            const platformName = 'Instagram';
 
             const queueItem = {
                 id: Date.now(),
@@ -1664,7 +1578,7 @@
             currentStep.textContent = step;
 
             if (item) {
-                document.getElementById('actionPlatform').textContent = item.platformName;
+                document.getElementById('actionPlatform').textContent = '📷 Instagram';
                 document.getElementById('actionAccount').textContent = `Account: ${item.account}`;
                 document.getElementById('actionDetails').textContent = 
                     `${item.hashtag ? `#${item.hashtag}` : item.keywords || 'No search terms'} • ${item.maxPosts} posts • ${item.useAI ? 'AI Comments' : 'Manual Comment'}`;
@@ -2025,17 +1939,8 @@
                 return;
             }
 
-            // Get platform for this session
-            let platform = 'instagram'; // default
-            try {
-                const sessionData = localStorage.getItem(`session_${activeSession}`);
-                if (sessionData) {
-                    const parsed = JSON.parse(sessionData);
-                    platform = parsed.platform || 'instagram';
-                }
-            } catch (error) {
-                console.log('Could not get platform from session data, using default');
-            }
+            // Instagram-only platform
+            const platform = 'instagram';
 
             updateSessionStatus('Checking session status...', 'loading');
             
@@ -2051,7 +1956,7 @@
                 });
                 
                 const result = await response.json();
-                if (result.ok && result.loggedIn) {
+                if (result.ok && result.status && result.status.isLoggedIn) {
                     updateSessionStatus(`✅ ${activeSession} (${platform}) is logged in`, 'success');
                 } else {
                     updateSessionStatus(`❌ ${activeSession} (${platform}) is not logged in`, 'error');
@@ -2062,15 +1967,15 @@
         }
 
         async function login() {
-            const platform = document.getElementById('platform').value;
+            const platform = 'instagram';
             const sessionName = document.getElementById('sessionName').value;
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             const assistantId = document.getElementById('assistantId').value;
             const headful = document.getElementById('headful').checked;
 
-            if (!platform || !sessionName) {
-                updateSessionStatus('Please fill in platform and account name', 'error');
+            if (!sessionName) {
+                updateSessionStatus('Please fill in account name', 'error');
                 return;
             }
 
@@ -2125,17 +2030,8 @@
                 return;
             }
 
-            // Get platform for this session
-            let platform = 'instagram'; // default
-            try {
-                const sessionData = localStorage.getItem(`session_${activeSession}`);
-                if (sessionData) {
-                    const parsed = JSON.parse(sessionData);
-                    platform = parsed.platform || 'instagram';
-                }
-            } catch (error) {
-                console.log('Could not get platform from session data, using default');
-            }
+            // Instagram-only platform
+            const platform = 'instagram';
 
             updateSessionStatus('Logging out...', 'loading');
             
@@ -2191,18 +2087,8 @@
             const comment = document.getElementById('comment').value.trim();
             const likePost = document.getElementById('likePost').checked;
             const headful = document.getElementById('autoHeadful').checked;
-            // Get platform from session data
-            let platform = 'instagram'; // default
-            try {
-                const sessionData = localStorage.getItem(`session_${activeSession}`);
-                if (sessionData) {
-                    const parsed = JSON.parse(sessionData);
-                    platform = parsed.platform || 'instagram';
-                }
-            } catch (error) {
-                console.log('Could not get platform from session data, using default');
-                platform = 'instagram';
-            }
+            // Instagram-only platform
+            const platform = 'instagram';
 
             // Validation
             if (!hashtag && !keywords) {

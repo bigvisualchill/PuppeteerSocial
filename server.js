@@ -85,6 +85,38 @@ function sendProgressUpdate(sessionId, progressData) {
   }
 }
 
+// Endpoint to clear corrupted browser contexts
+app.post('/cleanup', async (req, res) => {
+  try {
+    console.log('🧹 Cleanup endpoint called');
+    
+    // Clear all running platforms
+    runningPlatforms.clear();
+    
+    // Clear all progress connections
+    for (const [sessionId, connection] of progressConnections.entries()) {
+      try {
+        connection.end();
+      } catch (error) {
+        console.log(`Failed to close connection ${sessionId}:`, error.message);
+      }
+    }
+    progressConnections.clear();
+    
+    // Import and call the cleanup function from bot.js
+    const { cleanupBrowserContexts } = await import('./bot.js');
+    if (cleanupBrowserContexts) {
+      await cleanupBrowserContexts();
+    }
+    
+    console.log('✅ Cleanup completed');
+    res.json({ ok: true, message: 'Browser contexts and sessions cleaned up successfully' });
+  } catch (error) {
+    console.error('❌ Cleanup failed:', error.message);
+    res.json({ ok: false, message: `Cleanup failed: ${error.message}` });
+  }
+});
+
 app.post('/run', async (req, res) => {
   console.log('🔥 === POST /run ENDPOINT HIT ===');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
