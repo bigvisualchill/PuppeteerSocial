@@ -636,34 +636,52 @@ export async function instagramLike(page, postUrl) {
     }
 
     console.log(`❤️ Clicking like button...`);
-    await likeButton.click();
+    
+    // Use page.click() instead of ElementHandle.click() for better reliability
+    try {
+      await page.click('svg[aria-label="Like"]');
+      console.log(`❤️ Clicked like button using page.click()`);
+    } catch (clickError) {
+      console.log(`❤️ First click method failed, trying alternative...`);
+      
+      // Try alternative selectors
+      const alternativeSelectors = [
+        'button[aria-label="Like"]',
+        '[data-testid="like-button"]',
+        'article button:first-of-type'
+      ];
+      
+      let clicked = false;
+      for (const selector of alternativeSelectors) {
+        try {
+          await page.click(selector);
+          console.log(`❤️ Clicked like button using selector: ${selector}`);
+          clicked = true;
+          break;
+        } catch (e) {
+          // Continue to next selector
+        }
+      }
+      
+      if (!clicked) {
+        throw new Error('Could not click like button with any selector');
+      }
+    }
+    
     await sleep(1000);
     
-    // Try multiple click methods if first doesn't work
-    const clickResult = await page.evaluate(() => {
-      // Check if like was successful after first click
-      const likedAfterFirstClick = document.querySelector('svg[aria-label="Unlike"]') || 
-                                  document.querySelector('svg[fill="#ed4956"]');
-      
-      if (likedAfterFirstClick) {
-        return { success: true, method: 'first-click' };
-      }
-      
-      // Try clicking again with different approach
-      const likeButton = document.querySelector('svg[aria-label="Like"]') ||
-                        document.querySelector('button[aria-label="Like"]') ||
-                        document.querySelector('[data-testid="like-button"]');
-      
-      if (likeButton) {
-        likeButton.click();
-        return { success: true, method: 'second-click' };
-      }
-      
-      // Try keyboard shortcut (double-tap space or L key)
-      return { success: false, method: 'no-more-options' };
+    // Check if like was successful after click
+    const likedAfterClick = await page.evaluate(() => {
+      return !!(document.querySelector('svg[aria-label="Unlike"]') || 
+               document.querySelector('svg[fill="#ed4956"]'));
     });
     
-    console.log(`❤️ Click result:`, clickResult);
+    if (likedAfterClick) {
+      console.log(`❤️ Like successful after click`);
+    } else {
+      console.log(`⚠️ Like may not have worked - no unlike indicators found`);
+    }
+    
     await sleep(2000); // Wait for any animation
 
     // Verify the like was successful with comprehensive checking

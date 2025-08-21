@@ -695,6 +695,8 @@ export async function runAction(options) {
                   likedSuccessfully = true;
               } catch (likeError) {
                   console.log(`⚠️ Like failed but continuing with comment: ${likeError.message}`);
+                  console.log(`⚠️ Like error stack: ${likeError.stack}`);
+                  console.log(`⚠️ Like failed for post: ${postUrl}`);
                 }
               }
 
