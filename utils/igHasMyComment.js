@@ -6,37 +6,12 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CACHE_PATH = path.join(__dirname, "commented-posts.json");
+// Cache file path removed
 
 // cross-runtime sleep
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-// ---------- cache helpers ----------
-function loadCache() {
-  if (!fs.existsSync(CACHE_PATH)) return new Set();
-  try {
-    const arr = JSON.parse(fs.readFileSync(CACHE_PATH, "utf8"));
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch {
-    return new Set();
-  }
-}
-function saveCache(set) {
-  try { fs.writeFileSync(CACHE_PATH, JSON.stringify([...set], null, 2)); } catch {}
-}
-let MEM_CACHE = loadCache();
-
-export function clearCommentCache() {
-  MEM_CACHE = new Set();
-  try { fs.unlinkSync(CACHE_PATH); } catch {}
-}
-export function getCommentCacheStats() {
-  return {
-    size: MEM_CACHE.size,
-    entries: [...MEM_CACHE].slice(0, 100),
-    path: CACHE_PATH,
-  };
-}
+// Cache functionality removed
 
 // Debug function to test comment detection on current page
 export async function debugCommentDetection(page, username) {
@@ -227,7 +202,7 @@ async function expandCommentsEfficiently(page, handle) {
   if (result.found) return true;
   
   // Expand main comments first (most likely to contain our comment)
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) { // Increased from 5 to 8
     const clicked = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll("button,a")).filter(el => {
         const t = (el.textContent || "").toLowerCase();
@@ -238,7 +213,7 @@ async function expandCommentsEfficiently(page, handle) {
     });
     if (!clicked) break;
     console.log(`🔄 Expanded main comments (iteration ${i + 1})`);
-    await sleep(150);
+    await sleep(300); // Increased wait time from 150 to 300ms
     
     // Check after each expansion if we found our comment
     result = await findMyCommentOnPage(page, handle);
@@ -509,11 +484,7 @@ export async function hasMyCommentAndCache({
   console.log(`🔍 USERNAME: ${username}`);
   console.log(`🔍 MARK_COMMENTED: ${markCommented}`);
   
-  if (MEM_CACHE.has(shortcode)) {
-    console.log(`✅ CACHE HIT - already commented on ${shortcode}`);
-    console.log(`🔍 ===== COMMENT CHECK END: CACHED =====`);
-    return true; // fast-path
-  }
+  // Cache removed - always check for comments
 
   // Only navigate if we're not already on the post page
   const currentUrl = page.url();
@@ -550,11 +521,6 @@ export async function hasMyCommentAndCache({
   
   if (!handle) {
     console.log(`❌ NO HANDLE AVAILABLE - cannot check comments`);
-    if (markCommented) { 
-      MEM_CACHE.add(shortcode); 
-      saveCache(MEM_CACHE);
-      console.log(`💾 MARKED AS COMMENTED (no handle): ${shortcode}`);
-    }
     console.log(`🔍 ===== COMMENT CHECK END: NO HANDLE =====`);
     return false;
   }
@@ -573,11 +539,7 @@ export async function hasMyCommentAndCache({
     console.log(`🔍 ALTERNATIVE SEARCH RESULT: ${found ? 'COMMENT FOUND' : 'NO COMMENT FOUND'}`);
   }
   
-  if (found || markCommented) {
-    MEM_CACHE.add(shortcode);
-    saveCache(MEM_CACHE);
-    console.log(`💾 ADDED TO CACHE: ${shortcode}`);
-  }
+  // Cache removed - no saving needed
   
   console.log(`🔍 ===== COMMENT CHECK END: ${found ? 'FOUND' : 'NOT FOUND'} =====`);
   return found;

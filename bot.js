@@ -690,13 +690,18 @@ export async function runAction(options) {
             if (likePost) {
                 try {
                   console.log(`❤️ Attempting to like post...`);
-                  await instagramLike(page, postUrl);
-                  console.log(`✅ Post liked successfully`);
-                  likedSuccessfully = true;
+                  console.log(`⚠️ WARNING: Instagram has strong anti-bot measures for likes. This may not work reliably.`);
+                  const likeResult = await instagramLike(page, postUrl);
+                  if (likeResult) {
+                    console.log(`✅ Post liked successfully`);
+                    likedSuccessfully = true;
+                  } else {
+                    console.log(`❌ Like failed for post: ${postUrl}`);
+                    console.log(`ℹ️ This is normal - Instagram often blocks automated likes. Comments will still work.`);
+                  }
               } catch (likeError) {
                   console.log(`⚠️ Like failed but continuing with comment: ${likeError.message}`);
-                  console.log(`⚠️ Like error stack: ${likeError.stack}`);
-                  console.log(`⚠️ Like failed for post: ${postUrl}`);
+                  console.log(`ℹ️ This is normal - Instagram often blocks automated likes. Comments will still work.`);
                 }
               }
 
@@ -706,6 +711,12 @@ export async function runAction(options) {
               // Only count as success if comment was actually posted (not skipped)
               if (commentResult && commentResult.skipped) {
                 console.log(`⏭️ SKIPPED: ${commentResult.reason}`);
+                continue; // Skip to next post without incrementing counter
+              }
+              
+              // Check if comment actually succeeded
+              if (commentResult && !commentResult.success) {
+                console.log(`❌ COMMENT FAILED: ${commentResult.reason}`);
                 continue; // Skip to next post without incrementing counter
               }
               
